@@ -46,8 +46,8 @@ class mission_manger:
                     mission_id_data["state"] = 3
                     finish_list.append(mission_id)
 
-                    # 设置下一个任务状态为可见
-                    mission_dict = self.mission_state_check(mission_type, key, True)
+                    # 设置下一个任务状态为可见（传入已修改的 sync_data，避免重复读写冲突）
+                    mission_dict = self.mission_state_check(mission_type, key, True, sync_data=sync_data)
                 break
 
         # 在 result 中添加该类型任务的数据
@@ -61,7 +61,6 @@ class mission_manger:
         for mission_id in finish_list:
             result["playerDataDelta"]["modified"]["mission"]["missions"][mission_type][mission_id] = mission_data[mission_id]
 
-        # run_after_response(write_json, sync_data, SYNC_DATA_TEMPLATE_PATH)
         return result
 
     def AutoConfirmMissions(self):
@@ -96,7 +95,8 @@ class mission_manger:
 
             if all_completed:
                 mission_data_item["state"] = 3
-                mission_dict = self.mission_state_check(mission_type, mission_id, True)
+                # 传入已修改的 sync_data，避免重复读写冲突
+                mission_dict = self.mission_state_check(mission_type, mission_id, True, sync_data=sync_data)
 
                 if mission_dict is not None:
                     for mission_id2, mission_data_item2 in mission_dict.items():
@@ -104,21 +104,23 @@ class mission_manger:
                         result["playerDataDelta"]["modified"]["mission"]["missions"][mission_type][mission_id2] = mission_data_item2
                 result["playerDataDelta"]["modified"]["mission"]["missions"][mission_type][mission_id] = (mission_data_item)
 
-        # run_after_response(write_json, sync_data, SYNC_DATA_TEMPLATE_PATH)
+        run_after_response(write_json, sync_data, SYNC_DATA_TEMPLATE_PATH)
         return result
 
 
 
-    def mission_state_check(self, mission_type: str, mission_id: str, need_result: bool=False):
+    def mission_state_check(self, mission_type: str, mission_id: str, need_result: bool=False, sync_data: dict = None):
         '''
         用于每日任务与每周任务的状态更新
 
         :param mission_type: 要检查的任务状态类型，只能是"DAILY"或"WEEKLY"
         :param mission_id: 任务id，用于检查下一个任务是否可见
+        :param sync_data: 可选，传入已修改的 sync_data 以避免重复读写冲突；为 None 时自行读取
         '''
 
-        # 预设常量，读取数据
-        sync_data = read_json(SYNC_DATA_TEMPLATE_PATH)
+        # 预设常量，读取数据（若未传入则从文件读取）
+        if sync_data is None:
+            sync_data = read_json(SYNC_DATA_TEMPLATE_PATH)
         mission_data = sync_data["user"]["mission"]["missions"][mission_type]
         mission_dict = {}
         
