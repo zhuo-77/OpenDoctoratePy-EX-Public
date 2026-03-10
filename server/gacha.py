@@ -15,16 +15,17 @@ import os
 
 def syncNormalGacha():
 
-    #使用utf-8读取normalGacha.json的数据
-    NormalGachaData = read_json(NORMALGACHA_PATH)
-    
+    #读取玩家数据中的招募槽位信息
+    user_data = read_json(SYNC_DATA_TEMPLATE_PATH)
+    slots = user_data["user"]["recruit"]["normal"]["slots"]
+
     #定义要返回的json内容
     playerDataDelta = {
         "playerDataDelta":{
             "modified": {
                 "recruit": {
                     "normal": {
-                        "slots": NormalGachaData["detailInfo"]["availCharInfo"]["perAvailList"]
+                        "slots": slots
                     }
                 }
             },
@@ -212,7 +213,7 @@ def finishNormalGacha():
         item_get.append(potential)  # 添加潜能
 
         user_data["user"]["status"][item_name] += item_count  # 更新玩家状态
-        user_data["user"]["inventory"][f"p_{random_char_id}"] += 1  # 更新玩家库存
+        user_data["user"]["inventory"][f"p_{random_char_id}"] = user_data["user"]["inventory"].get(f"p_{random_char_id}", 0) + 1  # 更新玩家库存
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
         #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH) # 保存玩家数据
 

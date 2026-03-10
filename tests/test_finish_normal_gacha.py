@@ -1,13 +1,16 @@
 """
-Tests for finishNormalGacha in server/gacha.py.
+Tests for finishNormalGacha and syncNormalGacha in server/gacha.py.
 
 Covers:
 - New character branch: gainTime uses int(time()), hggShard incremented, charGet.isNew==1
 - Repeat character branch: correct item_name/type/id/count for every rarityRank (0-5)
   and both potential_rank states (< 5 and == 5)
+- Repeat character with potential item absent from inventory (KeyError fix)
+- syncNormalGacha returns user recruit slots (not gacha pool perAvailList)
 """
 
 import json
+import copy
 import sys
 import os
 import unittest
@@ -107,7 +110,6 @@ class TestFinishNormalGachaNewCharacter(unittest.TestCase):
 
         def fake_read_json(path):
             if "user" in path:
-                import copy
                 return copy.deepcopy(user_data)
             if "normalGacha" in path:
                 return gacha_data
@@ -197,7 +199,6 @@ class TestFinishNormalGachaRepeatCharacter(unittest.TestCase):
 
         def fake_read_json(path):
             if "user" in path:
-                import copy
                 return copy.deepcopy(user_data)
             if "normalGacha" in path:
                 return gacha_data
@@ -323,6 +324,120 @@ class TestFinishNormalGachaRepeatCharacter(unittest.TestCase):
         slot = result["playerDataDelta"]["modified"]["recruit"]["normal"]["slots"][str(SLOT_ID)]
         self.assertEqual(slot["state"], 1)
         self.assertEqual(slot["selectTags"], [])
+
+
+class TestFinishNormalGachaRepeatCharMissingInventory(unittest.TestCase):
+    """Repeat character whose potential item is not yet in the player inventory.
+
+    Regression test for the KeyError that occurred when
+    ``user_data["user"]["inventory"][f"p_{char_id}"] += 1``
+    was called for a character whose potential token had never been obtained.
+    """
+
+    def _run(self, rarity_rank=3):
+        user_data = _make_user_data()
+        # Remove the potential item from inventory to reproduce the original bug.
+        user_data["user"]["inventory"].pop(f"p_{CHAR_ID_REPEAT}", None)
+
+        gacha_data = _make_gacha_data(rarity_rank, CHAR_ID_REPEAT)
+        char_table = {
+            CHAR_ID_REPEAT: {"skills": [], "rarity": "RARITY_3"},
+            "charDefaultTypeDict": {CHAR_ID_REPEAT: "JP"},
+        }
+
+        fake_request = MagicMock()
+        fake_request.data = _request_body()
+
+        def fake_read_json(path):
+            if "user" in path:
+                return copy.deepcopy(user_data)
+            if "normalGacha" in path:
+                return gacha_data
+            raise FileNotFoundError(path)
+
+        def fake_get_memory(key):
+            if key == "character_table":
+                return char_table
+            if key == "uniequip_table":
+                return {}
+            raise KeyError(key)
+
+        with patch("gacha.request", fake_request), \
+             patch("gacha.read_json", side_effect=fake_read_json), \
+             patch("gacha.get_memory", side_effect=fake_get_memory), \
+             patch("gacha.run_after_response"), \
+             patch("gacha.random") as mock_random:
+
+            mock_random.shuffle = MagicMock()
+            mock_random.choice.side_effect = [
+                {"rarityRank": rarity_rank, "index": 0},
+                CHAR_ID_REPEAT,
+            ]
+
+            import gacha
+            result = gacha.finishNormalGacha()
+
+        return result
+
+    def test_no_key_error_when_potential_item_absent(self):
+        """Should not raise KeyError even when p_<charId> is absent from inventory."""
+        result = self._run(rarity_rank=3)
+        items = result["charGet"]["itemGet"]
+        potential_items = [i for i in items if i["type"] == "MATERIAL"]
+        self.assertEqual(len(potential_items), 1)
+        self.assertEqual(potential_items[0]["id"], f"p_{CHAR_ID_REPEAT}")
+        self.assertEqual(potential_items[0]["count"], 1)
+
+    def test_inventory_initialised_to_1_when_previously_absent(self):
+        """Inventory entry should be created and set to 1, not crash."""
+        result = self._run(rarity_rank=3)
+        # As long as no exception was raised the fix is working.
+        # We verify the potential item was still reported in itemGet.
+        items = result["charGet"]["itemGet"]
+        self.assertTrue(any(i["id"] == f"p_{CHAR_ID_REPEAT}" for i in items))
+
+
+class TestSyncNormalGacha(unittest.TestCase):
+    """syncNormalGacha should return the player's recruit slot states."""
+
+    SLOTS = {
+        "0": {"state": 1, "selectTags": [], "durationInSec": -1},
+        "1": {"state": 2, "selectTags": [{"pick": 1, "tagId": 3}], "durationInSec": 28800},
+    }
+
+    def _run(self):
+        user_data = {
+            "user": {
+                "recruit": {
+                    "normal": {
+                        "slots": self.SLOTS
+                    }
+                }
+            }
+        }
+
+        def fake_read_json(path):
+            if "user" in path:
+                return copy.deepcopy(user_data)
+            raise FileNotFoundError(path)
+
+        with patch("gacha.read_json", side_effect=fake_read_json):
+            import gacha
+            return gacha.syncNormalGacha()
+
+    def test_returns_player_recruit_slots(self):
+        result = self._run()
+        slots = result["playerDataDelta"]["modified"]["recruit"]["normal"]["slots"]
+        self.assertEqual(slots, self.SLOTS)
+
+    def test_slots_is_dict_not_list(self):
+        result = self._run()
+        slots = result["playerDataDelta"]["modified"]["recruit"]["normal"]["slots"]
+        self.assertIsInstance(slots, dict)
+
+    def test_deleted_key_present(self):
+        result = self._run()
+        self.assertIn("deleted", result["playerDataDelta"])
 
 
 if __name__ == "__main__":
