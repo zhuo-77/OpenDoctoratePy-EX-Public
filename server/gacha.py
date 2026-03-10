@@ -155,10 +155,9 @@ def finishNormalGacha():
         chars[str(inst_id)] = char_data  # 更新角色数据
 
         char_group = {"favorPoint": 0}  # 角色分组
-        sync_data_template = read_json(SYNC_DATA_TEMPLATE_PATH)
-        sync_data_template["troop"]["charGroup"][random_char_id] = char_group  # 更新玩家角色组
+        user_data["user"]["troop"]["charGroup"][random_char_id] = char_group  # 更新玩家角色组
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, sync_data_template, SYNC_DATA_TEMPLATE_PATH) # 更新同步数据
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH) # 更新同步数据
 
         building_char = {
             "charId": random_char_id,
@@ -177,10 +176,9 @@ def finishNormalGacha():
         item_get.append(shd)  # 添加物品
 
         is_new = 1  # 是新角色
-        user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-        user_json_path["status"]["hggShard"] += 1  # 更新玩家状态
+        user_data["user"]["status"]["hggShard"] += 1  # 更新玩家状态
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, user_json_path, SYNC_DATA_TEMPLATE_PATH)
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH)
     else:
         repeat_char = chars[str(repeat_char_id)]  # 重复角色
         potential_rank = repeat_char["potentialRank"]  # 潜能等级
@@ -209,18 +207,17 @@ def finishNormalGacha():
         potential = {"type": "MATERIAL", "id": f"p_{random_char_id}", "count": 1}  # 潜能
         item_get.append(potential)  # 添加潜能
 
-        user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-        user_json_path["status"][item_name] += item_count  # 更新玩家状态
-        user_json_path["inventory"][f"p_{random_char_id}"] += 1  # 更新玩家库存
+        user_data["user"]["status"][item_name] += item_count  # 更新玩家状态
+        user_data["user"]["inventory"][f"p_{random_char_id}"] += 1  # 更新玩家库存
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, user_json_path, SYNC_DATA_TEMPLATE_PATH) # 保存玩家数据
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH) # 保存玩家数据
 
         chars[str(repeat_char_id)] = repeat_char  # 更新角色数据
 
-    user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-    user_json_path["troop"]["chars"] = chars  # 更新玩家角色数据
-    user_json_path["recruit"]["normal"]["slots"][slot_id]["state"] = 1  # 更新招募状态
-    user_json_path["recruit"]["normal"]["slots"][slot_id]["selectTags"] = []  # 更新选择标签
+    user_data["user"]["troop"]["chars"] = chars  # 更新玩家角色数据
+    slot = user_data["user"]["recruit"]["normal"]["slots"][str(slot_id)]
+    slot["state"] = 1  # 更新招募状态
+    slot["selectTags"] = []  # 更新选择标签
 
     char_get = {
         "itemGet": item_get,  # 获得物品
@@ -232,9 +229,9 @@ def finishNormalGacha():
     return {
         "playerDataDelta": {
             "modified": {
-                "recruit": user_json_path["recruit"],  # 修改的招募数据
-                "status": user_json_path["status"],  # 修改的状态数据
-                "troop": user_json_path["troop"]  # 修改的玩家队伍数据
+                "recruit": user_data["user"]["recruit"],  # 修改的招募数据
+                "status": user_data["user"]["status"],  # 修改的状态数据
+                "troop": user_data["user"]["troop"]  # 修改的玩家队伍数据
             },
             "deleted": {}  # 删除的数据
         },
