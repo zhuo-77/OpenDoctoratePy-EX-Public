@@ -224,6 +224,8 @@ def finishNormalGacha():
     slot["state"] = 1  # 更新招募状态
     slot["selectTags"] = []  # 更新选择标签
 
+    run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH)  # 保存玩家数据
+
     char_get = {
         "itemGet": item_get,  # 获得物品
         "charId": random_char_id,  # 角色ID
@@ -918,11 +920,11 @@ def cate():
     for gacha in nearest_gachas:
         gacha_info = {
             "id": gacha["gachaPoolId"],
-            "name":  sorted_gacha_pools.get("gachaPoolId", {}).get("poolName", "") if gacha["gachaPoolId"].startswith("LIMITED") else "中坚寻访" if gacha["gachaPoolId"].startswith("CLASSIC") else "标准寻访" if gacha["gachaPoolId"].startswith("NORM") else "标准寻访"
+            "name": gacha.get("gachaPoolName", "") if gacha["gachaPoolId"].startswith("LIMITED") else "中坚寻访" if gacha["gachaPoolId"].startswith("CLASSIC") else "标准寻访" if gacha["gachaPoolId"].startswith("NORM") else "标准寻访"
         }
         
         # 仅当时间戳在openTime和endTime之间时才添加"active": True
-        if gacha["openTime"] <= time_stamp <= gacha["endTime"]:
+        if int(gacha["openTime"]) <= time_stamp <= int(gacha["endTime"]):
             gacha_info["active"] = True
 
         result_data.append(gacha_info)

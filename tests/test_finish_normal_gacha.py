@@ -440,5 +440,182 @@ class TestSyncNormalGacha(unittest.TestCase):
         self.assertIn("deleted", result["playerDataDelta"])
 
 
+class TestFinishNormalGachaPersistsUserData(unittest.TestCase):
+    """finishNormalGacha must persist user data (slot state reset) via run_after_response."""
+
+    def _run(self, rarity_rank=3, is_new_char=False):
+        char_id = CHAR_ID_NEW if is_new_char else CHAR_ID_REPEAT
+        user_data = _make_user_data()
+        if is_new_char:
+            # Remove CHAR_ID_NEW from chars so it's treated as new
+            user_data["user"]["troop"]["chars"] = {}
+
+        gacha_data = _make_gacha_data(rarity_rank, char_id)
+        char_table = _make_character_table(char_id)
+        charword_table = {"charDefaultTypeDict": {char_id: "JP"}}
+
+        fake_request = MagicMock()
+        fake_request.data = _request_body()
+
+        def fake_read_json(path):
+            if "user" in path:
+                return copy.deepcopy(user_data)
+            if "normalGacha" in path:
+                return gacha_data
+            raise FileNotFoundError(path)
+
+        def fake_get_memory(key):
+            if key == "character_table":
+                return char_table
+            if key == "charword_table":
+                return charword_table
+            if key == "uniequip_table":
+                return {}
+            raise KeyError(key)
+
+        with patch("gacha.request", fake_request), \
+             patch("gacha.read_json", side_effect=fake_read_json), \
+             patch("gacha.get_memory", side_effect=fake_get_memory), \
+             patch("gacha.run_after_response") as mock_run_after, \
+             patch("gacha.write_json") as mock_write_json, \
+             patch("gacha.random") as mock_random:
+
+            mock_random.shuffle = MagicMock()
+            mock_random.choice.side_effect = [
+                {"rarityRank": rarity_rank, "index": 0},
+                char_id,
+            ]
+
+            import gacha
+            gacha.finishNormalGacha()
+
+        return mock_run_after, mock_write_json
+
+    def test_run_after_response_called_with_write_json_and_user_data_path(self):
+        """run_after_response must be called with write_json and SYNC_DATA_TEMPLATE_PATH."""
+        mock_run_after, mock_write_json = self._run(rarity_rank=3)
+        self.assertTrue(mock_run_after.called,
+                        "run_after_response should be called to persist user data")
+        # The first positional arg to every run_after_response call should be write_json
+        from constants import SYNC_DATA_TEMPLATE_PATH
+        calls_with_path = [
+            c for c in mock_run_after.call_args_list
+            if len(c.args) >= 3 and c.args[2] == SYNC_DATA_TEMPLATE_PATH
+        ]
+        self.assertGreaterEqual(len(calls_with_path), 1,
+                                "run_after_response must be called with SYNC_DATA_TEMPLATE_PATH")
+
+    def test_slot_state_reset_in_saved_data_repeat_char(self):
+        """Saved user data must have slot state=1 and empty selectTags after repeat-char pull."""
+        mock_run_after, _ = self._run(rarity_rank=3)
+        from constants import SYNC_DATA_TEMPLATE_PATH
+        # Find the call that persists the full user data
+        save_call = next(
+            (c for c in mock_run_after.call_args_list
+             if len(c.args) >= 3 and c.args[2] == SYNC_DATA_TEMPLATE_PATH),
+            None
+        )
+        self.assertIsNotNone(save_call, "No save call with SYNC_DATA_TEMPLATE_PATH found")
+        saved_data = save_call.args[1]
+        slot = saved_data["user"]["recruit"]["normal"]["slots"][str(SLOT_ID)]
+        self.assertEqual(slot["state"], 1)
+        self.assertEqual(slot["selectTags"], [])
+
+
+class TestCate(unittest.TestCase):
+    """cate() should return correct gacha pool list without crashing."""
+
+    # Representative pool timestamps for tests: open time is in the past,
+    # end time is far in the future, so pools are always "active" regardless of when tests run.
+    _OPEN = 1000000000   # 2001-09-08 — safely in the past
+    _END  = 9999999999   # 2286-11-20 — safely in the future
+
+    def _make_gacha_table(self, pool_ids):
+        return {
+            "gachaPoolClient": [
+                {
+                    "gachaPoolId": pid,
+                    "gachaPoolName": f"name_{pid}",
+                    "openTime": self._OPEN,
+                    "endTime": self._END,
+                }
+                for pid in pool_ids
+            ]
+        }
+
+    def _run(self, pool_ids):
+        gacha_table = self._make_gacha_table(pool_ids)
+
+        with patch("gacha.get_memory", return_value=gacha_table), \
+             patch("gacha.time", return_value=5000000000):
+            import gacha
+            raw = gacha.cate()
+
+        return json.loads(raw)
+
+    def test_norm_pool_returns_correct_name(self):
+        result = self._run(["NORM_001"])
+        self.assertEqual(result["code"], 0)
+        pool = result["data"][0]
+        self.assertEqual(pool["id"], "NORM_001")
+        self.assertEqual(pool["name"], "标准寻访")
+
+    def test_classic_pool_returns_correct_name(self):
+        result = self._run(["CLASSIC_001"])
+        pool = result["data"][0]
+        self.assertEqual(pool["name"], "中坚寻访")
+
+    def test_limited_pool_uses_pool_name_from_data(self):
+        """LIMITED pools must use gachaPoolName from the table, not crash with AttributeError."""
+        result = self._run(["LIMITED_001"])
+        pool = result["data"][0]
+        self.assertEqual(pool["name"], "name_LIMITED_001")
+
+    def test_active_flag_set_for_active_pool(self):
+        """Pools whose openTime <= current time <= endTime should have active=True."""
+        result = self._run(["NORM_001"])
+        pool = result["data"][0]
+        self.assertTrue(pool.get("active"), "Active pool should have active=True")
+
+    def test_inactive_pool_has_no_active_flag(self):
+        """Pools outside the active window should NOT have active=True."""
+        # Use a pool that ended in the past
+        gacha_table = {
+            "gachaPoolClient": [
+                {
+                    "gachaPoolId": "NORM_OLD",
+                    "gachaPoolName": "old pool",
+                    "openTime": 1000,
+                    "endTime": 2000,
+                }
+            ]
+        }
+        with patch("gacha.get_memory", return_value=gacha_table), \
+             patch("gacha.time", return_value=5000000000):
+            import gacha
+            raw = gacha.cate()
+        result = json.loads(raw)
+        pool = result["data"][0]
+        self.assertNotIn("active", pool)
+
+    def test_max_four_pools_returned(self):
+        """cate() must return at most 4 pools."""
+        pool_ids = [f"NORM_{i:03d}" for i in range(10)]
+        result = self._run(pool_ids)
+        self.assertLessEqual(len(result["data"]), 4)
+
+    def test_empty_pool_list(self):
+        """cate() should handle an empty gacha pool list gracefully."""
+        gacha_table = {"gachaPoolClient": []}
+        with patch("gacha.get_memory", return_value=gacha_table), \
+             patch("gacha.time", return_value=5000000000):
+            import gacha
+            raw = gacha.cate()
+        result = json.loads(raw)
+        self.assertEqual(result["code"], 0)
+        self.assertEqual(result["data"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
+
