@@ -27,10 +27,11 @@ def accountLogin():
         uid = uuid.uuid4()
 
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "result": 0,
         "uid": str(uid),
-        "secret": "yostar",
+        "secret": creds["secret"],
         "serviceLicenseVersion": 0
     }
 
@@ -646,11 +647,12 @@ def accountYostarAuthRequest():
 
 def accountYostarAuthSubmit():
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "result": 0,
-        "yostar_account": "1234567890@123.com",
-        "yostar_token": "a",
-        "yostar_uid": "10000023"
+        "yostar_account": creds["yostar_username"],
+        "yostar_token": creds["token"],
+        "yostar_uid": creds["yostar_uid"]
     }
 
     return data

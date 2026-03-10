@@ -105,6 +105,17 @@
   "towerConfig": {
     "season": "tower_season_5"
   },
+  "userCredentials": {
+    "uid": "10000023",
+    "yostar_uid": "1",
+    "yostar_username": "1234567890@123.com",
+    "secret": "yostar",
+    "token": "abcd",
+    "auth_token": "doctorate",
+    "hgId": "1",
+    "phone": "12345678901",
+    "identityName": "JieG"
+  },
   "userConfig": {
     "activityMinStartTs": 1756353600,
     "activityMaxStartTs": 1758743999,
