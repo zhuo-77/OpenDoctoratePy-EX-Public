@@ -100,9 +100,9 @@ def finishNormalGacha():
     random_char_id = random.choice(avail_char_info[random_rank["index"]]["charIdList"])  # 随机选择角色ID
 
     repeat_char_id = 0  # 重复角色ID
-    for j in range(1, len(chars) + 1):
-        if chars[str(j)]["charId"] == random_char_id:
-            repeat_char_id = j
+    for j in chars:
+        if chars[j]["charId"] == random_char_id:
+            repeat_char_id = int(j)
             break
 
     item_get = []  # 获得物品列表
@@ -124,7 +124,7 @@ def finishNormalGacha():
             }
             skils.append(new_skill)
 
-        inst_id = len(chars) + 1  # 实例ID
+        inst_id = max(int(k) for k in chars) + 1 if chars else 1  # 实例ID
         char_inst_id = inst_id
         char_data["instId"] = inst_id  # 实例ID
         char_data["charId"] = random_char_id  # 角色ID
