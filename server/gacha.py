@@ -135,14 +135,13 @@ def finishNormalGacha():
         char_data["level"] = 1  # 等级
         char_data["exp"] = 0  # 经验值
         char_data["evolvePhase"] = 0  # 精英阶段
-        char_data["gainTime"] = int(time)  # 获得时间
+        char_data["gainTime"] = int(time())  # 获得时间
         char_data["skills"] = skils  # 技能
         char_data["equip"] = {}  # 装备
         char_data["voiceLan"] = get_memory("charword_table")["charDefaultTypeDict"][random_char_id]  # 角色语音
         char_data["defaultSkillIndex"] = -1 if not skils else 0  # 默认技能索引
 
-        sub1 = random_char_id.split("_", 2)[2]  # 分割字符
-        char_name = sub1.split("_", 1)[1]  # 分割角色名
+        char_name = random_char_id.split("_", 2)[2]  # 分割角色名
 
         if f"uniequip_001_{char_name}" in get_memory("uniequip_table"):
             equip = {
@@ -161,7 +160,7 @@ def finishNormalGacha():
 
         building_char = {
             "charId": random_char_id,
-            "lastApAddTime": int(time),
+            "lastApAddTime": int(time()),
             "ap": 8640000,
             "roomSlotId": "",
             "index": -1,
@@ -182,7 +181,7 @@ def finishNormalGacha():
     else:
         repeat_char = chars[str(repeat_char_id)]  # 重复角色
         potential_rank = repeat_char["potentialRank"]  # 潜能等级
-        rarity = get_memory("character_table")[random_char_id]["rarity"]  # 稀有度
+        rarity = random_rank['rarityRank']  # 稀有度
 
         item_name, item_type, item_id, item_count = "", "", "", 0  # 物品名、类型、ID、数量
         if rarity in [0, 1, 2, 3]:
@@ -195,11 +194,16 @@ def finishNormalGacha():
                 item_count = 30
             else:
                 item_count = 1
-        elif rarity in [4, 5]:
+        elif rarity == 4:
             item_name = "hggShard"
             item_type = "HGG_SHD"
             item_id = "4004"
-            item_count = 5 if potential_rank != 5 else 8 if rarity == 4 else 10 if potential_rank != 5 else 15
+            item_count = 5 if potential_rank != 5 else 8
+        elif rarity == 5:
+            item_name = "hggShard"
+            item_type = "HGG_SHD"
+            item_id = "4004"
+            item_count = 10 if potential_rank != 5 else 15
 
         shd = {"type": item_type, "id": item_id, "count": item_count}  # 物品
         item_get.append(shd)  # 添加物品
