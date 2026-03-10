@@ -105,10 +105,13 @@ def SyncData():
             }
         }
     }
-    try:
-        player_data["user"].get("charRotation")
-    except Exception:
+    # 若 charRotation 不存在则使用默认值；否则 deep_merge 以补全缺失字段并保留用户自定义配置
+    if not player_data["user"].get("charRotation"):
         player_data["user"]["charRotation"] = default_char_rotation
+    else:
+        player_data["user"]["charRotation"] = deep_merge(
+            default_char_rotation, player_data["user"]["charRotation"]
+        )
     saved_data["user"]["charRotation"] = player_data["user"]["charRotation"]
 
     target_current = player_data["user"]["charRotation"]["current"]
@@ -541,36 +544,43 @@ def SyncData():
             if replay in player_data["user"]["dungeon"]["stages"]:
                 player_data["user"]["dungeon"]["stages"][replay]["hasBattleReplay"] = 1
 
-    if not player_data["user"]["troop"]["squads"]:
-        squads_data = read_json(SQUADS_PATH)
-        charId2instId = {}
-        for character_index, character in player_data["user"]["troop"]["chars"].items():
-            charId2instId[character["charId"]] = character["instId"]
-        # 修改 #selectedCode 中的循环部分
-        for i in squads_data:
-            j = 0
-            for slot in squads_data[i]["slots"]:
-                if j == 12:
-                    break
-                charId = slot["charId"]
-                del slot["charId"]
-                if charId in charId2instId:
-                    instId = charId2instId[charId]
-                    slot["charInstId"] = instId
-                    # 添加安全检查，确保角色存在且有装备字段
-                    instId_str = str(instId)  # 确保使用字符串键
-                    if (instId_str in player_data["user"]["troop"]["chars"] and
-                            "equip" in player_data["user"]["troop"]["chars"][instId_str] and
-                            slot["currentEquip"] not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
-                        slot["currentEquip"] = None
-                else:
-                    squads_data[i]["slots"][j] = None
-                j += 1
-            for k in range(j, 12):
-                squads_data[i]["slots"].append(None)
-            squads_data[i]["slots"] = squads_data[i]["slots"][:12]
-
-        player_data["user"]["troop"]["squads"] = squads_data
+    # 始终加载默认编队并将 charId 转换为 charInstId，再 overlay 到用户已有编队上
+    # 这样可保证：用户自定义的编队名称和阵容在重启后不丢失，同时新增的默认编队也能自动补充
+    squads_default = read_json(SQUADS_PATH)
+    charId2instId = {}
+    for character_index, character in player_data["user"]["troop"]["chars"].items():
+        charId2instId[character["charId"]] = character["instId"]
+    for i in squads_default:
+        converted_slots = []
+        for slot in squads_default[i]["slots"][:12]:
+            if slot is None:
+                converted_slots.append(None)
+                continue
+            charId = slot.get("charId")
+            if charId in charId2instId:
+                instId = charId2instId[charId]
+                # 构造不含 charId 的新 slot dict，避免污染原始数据
+                new_slot = {k: v for k, v in slot.items() if k != "charId"}
+                new_slot["charInstId"] = instId
+                # 安全检查：仅在 currentEquip 非空且不在角色装备列表中时才清空
+                instId_str = str(instId)
+                current_equip = new_slot.get("currentEquip")
+                if (current_equip is not None and
+                        instId_str in player_data["user"]["troop"]["chars"] and
+                        "equip" in player_data["user"]["troop"]["chars"][instId_str] and
+                        current_equip not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
+                    new_slot["currentEquip"] = None
+                converted_slots.append(new_slot)
+            else:
+                converted_slots.append(None)
+        # 补足至 12 格
+        while len(converted_slots) < 12:
+            converted_slots.append(None)
+        squads_default[i]["slots"] = converted_slots
+    # overlay：保留用户已有的编队自定义（名称、阵容），对新增编队使用默认值
+    player_data["user"]["troop"]["squads"] = deep_merge(
+        squads_default, player_data["user"]["troop"].get("squads") or {}
+    )
 
     secretarySkinId = config["userConfig"]["secretarySkinId"]
     theme = config["userConfig"]["theme"]
