@@ -5,6 +5,7 @@ import threading
 import traceback
 import sys
 import os
+from copy import deepcopy
 
 from colorama import Fore, Back, Style, Cursor
 from msgspec.json import Encoder, Decoder, format
@@ -35,6 +36,23 @@ def write_json(data: Any, path: str, indent: int = 4):
         os.makedirs(os.path.dirname(path))
     with open(path, "wb") as f:
         f.write(format(json_encoder.encode(data), indent=indent))
+
+def deep_merge(base: dict, override: dict) -> dict:
+    """
+    深度合并两个字典，override 中的键值优先于 base。
+    对嵌套 dict 递归合并；对其他类型（包括 list）直接用 override 的值覆盖。
+
+    使用模式：deep_merge(默认值, 用户已有数据)
+    - base 中有而 override 中没有的键 → 保留默认值（新内容初始化）
+    - override 中有的键 → 保留用户数据（用户改动不丢失）
+    """
+    result = deepcopy(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = deepcopy(value)
+    return result
 
 def decrypt_battle_data(data: str, login_time: int = read_json(USER_JSON_PATH)["user"]["pushFlags"]["status"]):
     

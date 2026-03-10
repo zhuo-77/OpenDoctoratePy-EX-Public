@@ -1,6 +1,6 @@
 from virtualtime import time
 from flask import request
-from utils import read_json, write_json, get_memory, run_after_response
+from utils import read_json, write_json, get_memory, run_after_response, deep_merge
 from constants import SYNC_DATA_TEMPLATE_PATH, USER_JSON_PATH
 import json
 
@@ -23,8 +23,8 @@ def Sync():
                 building_data["chars"][k]["roomSlotId"] = i
                 building_data["chars"][k]["index"] = j
 
-    # 创建角色字典
-    chars = {
+    # 创建角色字典（默认值）
+    default_chars = {
         i: {
             "charId": user_data["user"]["troop"]["chars"][i]["charId"],
             "lastApAddTime": 1695000000,
@@ -37,19 +37,27 @@ def Sync():
         }
         for i in user_data["user"]["troop"]["chars"]
     }
+    # overlay：保留用户已有的 ap、roomSlotId 等状态，对新增干员使用默认值
+    existing_chars = user_data["user"]["building"].get("chars", {})
+    chars = deep_merge(default_chars, existing_chars)
+    # 始终用 troop 里的最新 charId 覆盖（charId 不应由用户修改）
+    for i in user_data["user"]["troop"]["chars"]:
+        if i in chars:
+            chars[i]["charId"] = user_data["user"]["troop"]["chars"][i]["charId"]
     # 将角色字典赋值给基建数据
     user_data["user"]["building"]["chars"] = chars
     # 更新基建数据中的角色实例ID列表
     update_building_char_InstId_List(user_data["user"]["building"])
     # 读取基建table数据
     building_table = get_memory("building_data")
-    # 创建家具字典
-    furniture = {
+    # 创建家具字典（默认值：所有家具数量初始化为 9999）
+    default_furniture = {
         i: {"count": 9999, "inUse": 0}
         for i in building_table["customData"]["furnitures"]
     }
-    # 将家具字典赋值给基建数据
-    user_data["user"]["building"]["furniture"] = furniture
+    # overlay：保留用户已有的家具数量/使用状态，对新增家具使用默认值
+    existing_furniture = user_data["user"]["building"].get("furniture", {})
+    user_data["user"]["building"]["furniture"] = deep_merge(default_furniture, existing_furniture)
     # 将基建数据写入文件
     run_after_response(write_json ,user_data, USER_JSON_PATH)
 

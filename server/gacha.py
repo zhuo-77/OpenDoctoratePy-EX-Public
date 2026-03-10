@@ -100,9 +100,9 @@ def finishNormalGacha():
     random_char_id = random.choice(avail_char_info[random_rank["index"]]["charIdList"])  # 随机选择角色ID
 
     repeat_char_id = 0  # 重复角色ID
-    for j in range(1, len(chars) + 1):
-        if chars[str(j)]["charId"] == random_char_id:
-            repeat_char_id = j
+    for j in chars:
+        if chars[j]["charId"] == random_char_id:
+            repeat_char_id = int(j)
             break
 
     item_get = []  # 获得物品列表
@@ -124,7 +124,7 @@ def finishNormalGacha():
             }
             skils.append(new_skill)
 
-        inst_id = len(chars) + 1  # 实例ID
+        inst_id = max(int(k) for k in chars) + 1 if chars else 1  # 实例ID
         char_inst_id = inst_id
         char_data["instId"] = inst_id  # 实例ID
         char_data["charId"] = random_char_id  # 角色ID
@@ -135,14 +135,13 @@ def finishNormalGacha():
         char_data["level"] = 1  # 等级
         char_data["exp"] = 0  # 经验值
         char_data["evolvePhase"] = 0  # 精英阶段
-        char_data["gainTime"] = int(time)  # 获得时间
+        char_data["gainTime"] = int(time())  # 获得时间
         char_data["skills"] = skils  # 技能
         char_data["equip"] = {}  # 装备
         char_data["voiceLan"] = get_memory("charword_table")["charDefaultTypeDict"][random_char_id]  # 角色语音
         char_data["defaultSkillIndex"] = -1 if not skils else 0  # 默认技能索引
 
-        sub1 = random_char_id.split("_", 2)[2]  # 分割字符
-        char_name = sub1.split("_", 1)[1]  # 分割角色名
+        char_name = random_char_id.split("_", 2)[2]  # 分割角色名
 
         if f"uniequip_001_{char_name}" in get_memory("uniequip_table"):
             equip = {
@@ -155,14 +154,13 @@ def finishNormalGacha():
         chars[str(inst_id)] = char_data  # 更新角色数据
 
         char_group = {"favorPoint": 0}  # 角色分组
-        sync_data_template = read_json(SYNC_DATA_TEMPLATE_PATH)
-        sync_data_template["troop"]["charGroup"][random_char_id] = char_group  # 更新玩家角色组
+        user_data["user"]["troop"]["charGroup"][random_char_id] = char_group  # 更新玩家角色组
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, sync_data_template, SYNC_DATA_TEMPLATE_PATH) # 更新同步数据
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH) # 更新同步数据
 
         building_char = {
             "charId": random_char_id,
-            "lastApAddTime": int(time),
+            "lastApAddTime": int(time()),
             "ap": 8640000,
             "roomSlotId": "",
             "index": -1,
@@ -177,14 +175,13 @@ def finishNormalGacha():
         item_get.append(shd)  # 添加物品
 
         is_new = 1  # 是新角色
-        user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-        user_json_path["status"]["hggShard"] += 1  # 更新玩家状态
+        user_data["user"]["status"]["hggShard"] += 1  # 更新玩家状态
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, user_json_path, SYNC_DATA_TEMPLATE_PATH)
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH)
     else:
         repeat_char = chars[str(repeat_char_id)]  # 重复角色
         potential_rank = repeat_char["potentialRank"]  # 潜能等级
-        rarity = read_json(SYNC_DATA_TEMPLATE_PATH)[random_char_id]["rarity"]  # 稀有度
+        rarity = random_rank['rarityRank']  # 稀有度
 
         item_name, item_type, item_id, item_count = "", "", "", 0  # 物品名、类型、ID、数量
         if rarity in [0, 1, 2, 3]:
@@ -197,11 +194,16 @@ def finishNormalGacha():
                 item_count = 30
             else:
                 item_count = 1
-        elif rarity in [4, 5]:
+        elif rarity == 4:
             item_name = "hggShard"
             item_type = "HGG_SHD"
             item_id = "4004"
-            item_count = 5 if potential_rank != 5 else 8 if rarity == 4 else 10 if potential_rank != 5 else 15
+            item_count = 5 if potential_rank != 5 else 8
+        elif rarity == 5:
+            item_name = "hggShard"
+            item_type = "HGG_SHD"
+            item_id = "4004"
+            item_count = 10 if potential_rank != 5 else 15
 
         shd = {"type": item_type, "id": item_id, "count": item_count}  # 物品
         item_get.append(shd)  # 添加物品
@@ -209,18 +211,17 @@ def finishNormalGacha():
         potential = {"type": "MATERIAL", "id": f"p_{random_char_id}", "count": 1}  # 潜能
         item_get.append(potential)  # 添加潜能
 
-        user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-        user_json_path["status"][item_name] += item_count  # 更新玩家状态
-        user_json_path["inventory"][f"p_{random_char_id}"] += 1  # 更新玩家库存
+        user_data["user"]["status"][item_name] += item_count  # 更新玩家状态
+        user_data["user"]["inventory"][f"p_{random_char_id}"] += 1  # 更新玩家库存
         # if EX_CONFIG_PATH["gacha"]["saveCharacter"] == True:
-        #     run_after_response(write_json, user_json_path, SYNC_DATA_TEMPLATE_PATH) # 保存玩家数据
+        #     run_after_response(write_json, user_data, SYNC_DATA_TEMPLATE_PATH) # 保存玩家数据
 
         chars[str(repeat_char_id)] = repeat_char  # 更新角色数据
 
-    user_json_path = read_json(SYNC_DATA_TEMPLATE_PATH)
-    user_json_path["troop"]["chars"] = chars  # 更新玩家角色数据
-    user_json_path["recruit"]["normal"]["slots"][slot_id]["state"] = 1  # 更新招募状态
-    user_json_path["recruit"]["normal"]["slots"][slot_id]["selectTags"] = []  # 更新选择标签
+    user_data["user"]["troop"]["chars"] = chars  # 更新玩家角色数据
+    slot = user_data["user"]["recruit"]["normal"]["slots"][str(slot_id)]
+    slot["state"] = 1  # 更新招募状态
+    slot["selectTags"] = []  # 更新选择标签
 
     char_get = {
         "itemGet": item_get,  # 获得物品
@@ -232,9 +233,9 @@ def finishNormalGacha():
     return {
         "playerDataDelta": {
             "modified": {
-                "recruit": user_json_path["recruit"],  # 修改的招募数据
-                "status": user_json_path["status"],  # 修改的状态数据
-                "troop": user_json_path["troop"]  # 修改的玩家队伍数据
+                "recruit": user_data["user"]["recruit"],  # 修改的招募数据
+                "status": user_data["user"]["status"],  # 修改的状态数据
+                "troop": user_data["user"]["troop"]  # 修改的玩家队伍数据
             },
             "deleted": {}  # 删除的数据
         },

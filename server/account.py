@@ -16,7 +16,7 @@ from constants import (
     SQUADS_PATH
 )
 from user import checkin
-from utils import read_json, write_json, get_memory, run_after_response, memory_cache
+from utils import read_json, write_json, get_memory, run_after_response, memory_cache, deep_merge
 from virtualtime import time
 
 
@@ -105,10 +105,13 @@ def SyncData():
             }
         }
     }
-    try:
-        player_data["user"].get("charRotation")
-    except Exception:
+    # 若 charRotation 不存在则使用默认值；否则 deep_merge 以补全缺失字段并保留用户自定义配置
+    if not player_data["user"].get("charRotation"):
         player_data["user"]["charRotation"] = default_char_rotation
+    else:
+        player_data["user"]["charRotation"] = deep_merge(
+            default_char_rotation, player_data["user"]["charRotation"]
+        )
     saved_data["user"]["charRotation"] = player_data["user"]["charRotation"]
 
     target_current = player_data["user"]["charRotation"]["current"]
@@ -145,7 +148,10 @@ def SyncData():
             continue
         character_skins[skin_id] = 1
         temp_skin_table[skin_data["charId"]] = skin_id
-    player_data["user"]["skin"]["characterSkins"] = character_skins
+    # overlay：保留用户已有的时装状态，对新增时装使用默认值（已解锁=1）
+    player_data["user"]["skin"]["characterSkins"] = deep_merge(
+        character_skins, player_data["user"]["skin"].get("characterSkins", {})
+    )
 
     # 处理干员数据
     edit_json = config["charConfig"]
@@ -322,18 +328,25 @@ def SyncData():
                 "src": "initial" if avatar["avatarId"].startswith("avatar_def") else "other"
             }
         })
-    player_data["user"]["avatar"]["avatar_icon"] = avatar_icon
+    # overlay：保留用户已有的头像/背景/主题解锁状态，对新增内容使用默认值
+    player_data["user"]["avatar"]["avatar_icon"] = deep_merge(
+        avatar_icon, player_data["user"]["avatar"].get("avatar_icon", {})
+    )
     bgs = {}
     for bg in display_meta_table["homeBackgroundData"]["homeBgDataList"]:
         bgs.update({
             bg["bgId"]: {"unlock": ts}
         })
-    player_data["user"]["background"]["bgs"] = bgs
+    player_data["user"]["background"]["bgs"] = deep_merge(
+        bgs, player_data["user"]["background"].get("bgs", {})
+    )
     if "themeList" in display_meta_table["homeBackgroundData"]:
         themes = {}
         for theme in display_meta_table["homeBackgroundData"]["themeList"]:
             themes[theme["id"]] = {"unlock": 1691670000}
-        player_data["user"]["homeTheme"]["themes"] = themes
+        player_data["user"]["homeTheme"]["themes"] = deep_merge(
+            themes, player_data["user"]["homeTheme"].get("themes", {})
+        )
 
     e = (lambda x: x["".join([chr(ord(c)+2) for c in "pjt0Amldge"])]["".join([\
     chr(ord(c)+3) for c in "s^fia\\pbba"])])(locals()["st"])
@@ -363,14 +376,20 @@ def SyncData():
                 }
             }
         })
-    player_data["user"]["troop"]["addon"].update(addonList)  # TODO: I might try MongoDB in the future.
+    # overlay：保留用户已有的干员档案进度，对新增内容使用默认值
+    player_data["user"]["troop"]["addon"] = deep_merge(
+        addonList, player_data["user"]["troop"].get("addon", {})
+    )  # TODO: I might try MongoDB in the future.
 
 
     # Tamper story
     myStoryList = {"init": 1}
     for story in story_table:
         myStoryList.update({story: 1})
-    player_data["user"]["status"]["flags"] = myStoryList
+    # overlay：保留用户已有的剧情状态，对新增剧情使用默认值（已解锁=1）
+    player_data["user"]["status"]["flags"] = deep_merge(
+        myStoryList, player_data["user"]["status"].get("flags", {})
+    )
 
     # Tamper Stages
     myStageList = {}
@@ -387,21 +406,27 @@ def SyncData():
             }
         })
 
-    player_data["user"]["dungeon"]["stages"] = myStageList
+    # overlay：保留用户已有的关卡进度（completeTimes、hasBattleReplay 等），对新关卡使用默认值
+    player_data["user"]["dungeon"]["stages"] = deep_merge(
+        myStageList, player_data["user"]["dungeon"].get("stages", {})
+    )
 
     # Tamper Anniliations
     for stage in stage_table["stages"]:
         if stage.startswith("camp"):
-            player_data["user"]["campaignsV2"]["instances"].update({
-                stage: {
+            # overlay：只为尚未存在的剿灭关卡设置默认值，保留用户已有的击杀数和奖励状态
+            if stage not in player_data["user"]["campaignsV2"]["instances"]:
+                player_data["user"]["campaignsV2"]["instances"][stage] = {
                     "maxKills": 400,
                     "rewardStatus": [1, 1, 1, 1, 1, 1, 1, 1]
                 }
-            })
-
-            player_data["user"]["campaignsV2"]["sweepMaxKills"].update({stage: 400})
-            player_data["user"]["campaignsV2"]["open"]["permanent"].append(stage)
-            player_data["user"]["campaignsV2"]["open"]["training"].append(stage)
+            if stage not in player_data["user"]["campaignsV2"]["sweepMaxKills"]:
+                player_data["user"]["campaignsV2"]["sweepMaxKills"][stage] = 400
+            # 避免重复追加导致列表无限增长
+            if stage not in player_data["user"]["campaignsV2"]["open"]["permanent"]:
+                player_data["user"]["campaignsV2"]["open"]["permanent"].append(stage)
+            if stage not in player_data["user"]["campaignsV2"]["open"]["training"]:
+                player_data["user"]["campaignsV2"]["open"]["training"].append(stage)
 
     # Tamper Side Stories and Intermezzis
     block = {}
@@ -412,7 +437,10 @@ def SyncData():
                 "open": 1
             }
         })
-    player_data["user"]["retro"]["block"] = block
+    # overlay：保留用户已有的复刻关进度
+    player_data["user"]["retro"]["block"] = deep_merge(
+        block, player_data["user"]["retro"].get("block", {})
+    )
 
     trail = {}
     for retro in retro_table["retroTrailList"]:
@@ -423,7 +451,9 @@ def SyncData():
                     trailReward["trailRewardId"]: 1
                 }
             })
-    player_data["user"]["retro"]["trail"] = trail
+    player_data["user"]["retro"]["trail"] = deep_merge(
+        trail, player_data["user"]["retro"].get("trail", {})
+    )
 
     # 名片
     name_card_skin = player_data["user"]["nameCardStyle"]["skin"]["state"]
@@ -445,14 +475,16 @@ def SyncData():
     activity_data = activity_table["activity"]["TYPE_ACT17SIDE"]["act17side"]
     for c in e[:eval('len(w)%2')]:z ^= ord(c)
 
-    deep_sea.update({
-        "places": {place: 2 for place in activity_data["placeDataMap"]},
-        "nodes": {node: 2 for node in activity_data["nodeInfoDataMap"]},
-        "choices": {
-            k: [2] * len(v["optionList"])
-            for k, v in activity_data["choiceNodeDataMap"].items()
-        }
-    })
+    # overlay：保留用户已有的深海探索进度，对新增节点/地点使用默认值
+    new_places = {place: 2 for place in activity_data["placeDataMap"]}
+    new_nodes = {node: 2 for node in activity_data["nodeInfoDataMap"]}
+    new_choices = {
+        k: [2] * len(v["optionList"])
+        for k, v in activity_data["choiceNodeDataMap"].items()
+    }
+    deep_sea["places"] = deep_merge(new_places, deep_sea.get("places", {}))
+    deep_sea["nodes"] = deep_merge(new_nodes, deep_sea.get("nodes", {}))
+    deep_sea["choices"] = deep_merge(new_choices, deep_sea.get("choices", {}))
 
     for event in activity_data["eventDataMap"]:
         player_data["user"]["deepSea"]["events"].update({event: 1})
@@ -462,23 +494,23 @@ def SyncData():
         player_data["user"]["deepSea"]["stories"].update(
             {activity_data["storyNodeDataMap"][story]["storyKey"]: 1}
         )
+    # overlay：只为尚未存在的科技树节点设置默认值，保留用户已有的选择
     for tech in activity_data["techTreeDataMap"]:
-        player_data["user"]["deepSea"]["techTrees"].update({
-            tech: {
+        if tech not in player_data["user"]["deepSea"]["techTrees"]:
+            player_data["user"]["deepSea"]["techTrees"][tech] = {
                 "state": 2,
                 "branch": activity_data["techTreeDataMap"][tech]["defaultBranchId"]
             }
-        })
 
     for log in activity_data["archiveItemUnlockDataMap"]:
         if not log.startswith("act17side_log_"):
             continue
 
         chapter = activity_data["archiveItemUnlockDataMap"][log]["chapterId"]
-        if chapter in player_data["user"]["deepSea"]["logs"].keys():
-            player_data["user"]["deepSea"]["logs"][chapter].append(log)
-        else:
-            player_data["user"]["deepSea"]["logs"].update({chapter: [log]})
+        # 避免每次 SyncData 重复追加导致日志列表无限增长
+        chapter_logs = player_data["user"]["deepSea"]["logs"].setdefault(chapter, [])
+        if log not in chapter_logs:
+            chapter_logs.append(log)
 
     # Check if mail exists
     received_set = set(mail_data["recievedIDs"])
@@ -512,36 +544,43 @@ def SyncData():
             if replay in player_data["user"]["dungeon"]["stages"]:
                 player_data["user"]["dungeon"]["stages"][replay]["hasBattleReplay"] = 1
 
-    if not player_data["user"]["troop"]["squads"]:
-        squads_data = read_json(SQUADS_PATH)
-        charId2instId = {}
-        for character_index, character in player_data["user"]["troop"]["chars"].items():
-            charId2instId[character["charId"]] = character["instId"]
-        # 修改 #selectedCode 中的循环部分
-        for i in squads_data:
-            j = 0
-            for slot in squads_data[i]["slots"]:
-                if j == 12:
-                    break
-                charId = slot["charId"]
-                del slot["charId"]
-                if charId in charId2instId:
-                    instId = charId2instId[charId]
-                    slot["charInstId"] = instId
-                    # 添加安全检查，确保角色存在且有装备字段
-                    instId_str = str(instId)  # 确保使用字符串键
-                    if (instId_str in player_data["user"]["troop"]["chars"] and
-                            "equip" in player_data["user"]["troop"]["chars"][instId_str] and
-                            slot["currentEquip"] not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
-                        slot["currentEquip"] = None
-                else:
-                    squads_data[i]["slots"][j] = None
-                j += 1
-            for k in range(j, 12):
-                squads_data[i]["slots"].append(None)
-            squads_data[i]["slots"] = squads_data[i]["slots"][:12]
-
-        player_data["user"]["troop"]["squads"] = squads_data
+    # 始终加载默认编队并将 charId 转换为 charInstId，再 overlay 到用户已有编队上
+    # 这样可保证：用户自定义的编队名称和阵容在重启后不丢失，同时新增的默认编队也能自动补充
+    squads_default = read_json(SQUADS_PATH)
+    charId2instId = {}
+    for character_index, character in player_data["user"]["troop"]["chars"].items():
+        charId2instId[character["charId"]] = character["instId"]
+    for i in squads_default:
+        converted_slots = []
+        for slot in squads_default[i]["slots"][:12]:
+            if slot is None:
+                converted_slots.append(None)
+                continue
+            charId = slot.get("charId")
+            if charId in charId2instId:
+                instId = charId2instId[charId]
+                # 构造不含 charId 的新 slot dict，避免污染原始数据
+                new_slot = {k: v for k, v in slot.items() if k != "charId"}
+                new_slot["charInstId"] = instId
+                # 安全检查：仅在 currentEquip 非空且不在角色装备列表中时才清空
+                instId_str = str(instId)
+                current_equip = new_slot.get("currentEquip")
+                if (current_equip is not None and
+                        instId_str in player_data["user"]["troop"]["chars"] and
+                        "equip" in player_data["user"]["troop"]["chars"][instId_str] and
+                        current_equip not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
+                    new_slot["currentEquip"] = None
+                converted_slots.append(new_slot)
+            else:
+                converted_slots.append(None)
+        # 补足至 12 格
+        while len(converted_slots) < 12:
+            converted_slots.append(None)
+        squads_default[i]["slots"] = converted_slots
+    # overlay：保留用户已有的编队自定义（名称、阵容），对新增编队使用默认值
+    player_data["user"]["troop"]["squads"] = deep_merge(
+        squads_default, player_data["user"]["troop"].get("squads") or {}
+    )
 
     secretarySkinId = config["userConfig"]["secretarySkinId"]
     theme = config["userConfig"]["theme"]
@@ -574,7 +613,10 @@ def SyncData():
                 i
             ]["rewardList"]:
                 story_review_groups[i]["trailRewards"].append(j["trialRewardId"])
-    player_data["user"]["storyreview"]["groups"] = story_review_groups
+    # overlay：保留用户已有的故事回顾进度，对新增内容使用默认值（已完成）
+    player_data["user"]["storyreview"]["groups"] = deep_merge(
+        story_review_groups, player_data["user"]["storyreview"].get("groups", {})
+    )
 
     enemies = {}
     if "enemyData" in enemy_handbook_table:
@@ -583,7 +625,10 @@ def SyncData():
     else:
         for i in enemy_handbook_table:
             enemies[i] = 1
-    player_data["user"]["dexNav"]["enemy"]["enemies"] = enemies
+    # overlay：保留用户已有的敌人图鉴状态，对新增敌人使用默认值（已发现=1）
+    player_data["user"]["dexNav"]["enemy"]["enemies"] = deep_merge(
+        enemies, player_data["user"]["dexNav"]["enemy"].get("enemies", {})
+    )
 
     for i in activity_table["activity"]:
         if i not in player_data["user"]["activity"]:
@@ -592,22 +637,26 @@ def SyncData():
             if j not in player_data["user"]["activity"][i]:
                 player_data["user"]["activity"][i][j] = {}
 
-    player_data["user"]["medal"] = {"medals": {}}
+    all_medals = {}
     for i in medal_table["medalList"]:
         medalId = i["medalId"]
-        player_data["user"]["medal"]["medals"][medalId] = {
+        all_medals[medalId] = {
             "id": medalId,
             "val": [],
             "fts": 1695000000,
             "rts": 1695000000,
         }
+    # overlay：保留用户已有的勋章进度，对新增勋章使用默认值
+    existing_medals = player_data["user"].get("medal", {}).get("medals", {})
+    player_data["user"]["medal"] = {"medals": deep_merge(all_medals, existing_medals)}
 
     rlv2_table = get_memory("roguelike_topic_table")
     for theme in player_data["user"]["rlv2"]["outer"]:
         if theme in rlv2_table["details"]:
-            player_data["user"]["rlv2"]["outer"][theme]["record"]["stageCnt"] = {
-                i: 1 for i in rlv2_table["details"][theme]["stages"]
-            }
+            new_stage_cnt = {i: 1 for i in rlv2_table["details"][theme]["stages"]}
+            # overlay：保留用户已有的肉鸽关卡完成记录，对新增关卡使用默认值
+            existing_stage_cnt = player_data["user"]["rlv2"]["outer"][theme]["record"].get("stageCnt", {})
+            player_data["user"]["rlv2"]["outer"][theme]["record"]["stageCnt"] = deep_merge(new_stage_cnt, existing_stage_cnt)
 
     selected_crisis = config["crisisV2Config"]["selectedCrisis"]
     if selected_crisis:
