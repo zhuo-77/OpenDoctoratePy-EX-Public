@@ -512,35 +512,36 @@ def SyncData():
             if replay in player_data["user"]["dungeon"]["stages"]:
                 player_data["user"]["dungeon"]["stages"][replay]["hasBattleReplay"] = 1
 
-    squads_data = read_json(SQUADS_PATH)
-    charId2instId = {}
-    for character_index, character in player_data["user"]["troop"]["chars"].items():
-        charId2instId[character["charId"]] = character["instId"]
-    # 修改 #selectedCode 中的循环部分
-    for i in squads_data:
-        j = 0
-        for slot in squads_data[i]["slots"]:
-            if j == 12:
-                break
-            charId = slot["charId"]
-            del slot["charId"]
-            if charId in charId2instId:
-                instId = charId2instId[charId]
-                slot["charInstId"] = instId
-                # 添加安全检查，确保角色存在且有装备字段
-                instId_str = str(instId)  # 确保使用字符串键
-                if (instId_str in player_data["user"]["troop"]["chars"] and
-                        "equip" in player_data["user"]["troop"]["chars"][instId_str] and
-                        slot["currentEquip"] not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
-                    slot["currentEquip"] = None
-            else:
-                squads_data[i]["slots"][j] = None
-            j += 1
-        for k in range(j, 12):
-            squads_data[i]["slots"].append(None)
-        squads_data[i]["slots"] = squads_data[i]["slots"][:12]
+    if not player_data["user"]["troop"]["squads"]:
+        squads_data = read_json(SQUADS_PATH)
+        charId2instId = {}
+        for character_index, character in player_data["user"]["troop"]["chars"].items():
+            charId2instId[character["charId"]] = character["instId"]
+        # 修改 #selectedCode 中的循环部分
+        for i in squads_data:
+            j = 0
+            for slot in squads_data[i]["slots"]:
+                if j == 12:
+                    break
+                charId = slot["charId"]
+                del slot["charId"]
+                if charId in charId2instId:
+                    instId = charId2instId[charId]
+                    slot["charInstId"] = instId
+                    # 添加安全检查，确保角色存在且有装备字段
+                    instId_str = str(instId)  # 确保使用字符串键
+                    if (instId_str in player_data["user"]["troop"]["chars"] and
+                            "equip" in player_data["user"]["troop"]["chars"][instId_str] and
+                            slot["currentEquip"] not in player_data["user"]["troop"]["chars"][instId_str]["equip"]):
+                        slot["currentEquip"] = None
+                else:
+                    squads_data[i]["slots"][j] = None
+                j += 1
+            for k in range(j, 12):
+                squads_data[i]["slots"].append(None)
+            squads_data[i]["slots"] = squads_data[i]["slots"][:12]
 
-    player_data["user"]["troop"]["squads"] = squads_data
+        player_data["user"]["troop"]["squads"] = squads_data
 
     secretarySkinId = config["userConfig"]["secretarySkinId"]
     theme = config["userConfig"]["theme"]
