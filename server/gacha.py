@@ -184,7 +184,7 @@ def finishNormalGacha():
     else:
         repeat_char = chars[str(repeat_char_id)]  # 重复角色
         potential_rank = repeat_char["potentialRank"]  # 潜能等级
-        rarity = read_json(SYNC_DATA_TEMPLATE_PATH)[random_char_id]["rarity"]  # 稀有度
+        rarity = get_memory("character_table")[random_char_id]["rarity"]  # 稀有度
 
         item_name, item_type, item_id, item_count = "", "", "", 0  # 物品名、类型、ID、数量
         if rarity in [0, 1, 2, 3]:
