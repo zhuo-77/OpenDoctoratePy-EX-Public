@@ -6,7 +6,7 @@ from flask import request
 from random import random
 
 from constants import USER_JSON_PATH, SYNC_DATA_TEMPLATE_PATH, SERVER_DATA_PATH
-from utils import read_json, write_json, run_after_response
+from utils import read_json, write_json, run_after_response, memory_cache
 from mission import mission_manger
 
 import time
@@ -176,6 +176,7 @@ def ChangeSecretary():
 def Login():
 
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "accessToken": "1",
         "birth": None,
@@ -185,10 +186,10 @@ def Login():
         "isMinor": False,
         "needAuthenticate": False,
         "result": 0,
-        "token": "abcd",
-        "yostar_username": "1234567890@123.com",
-        "yostar_uid": "1",
-        "uid": "10000023"
+        "token": creds["token"],
+        "yostar_username": creds["yostar_username"],
+        "yostar_uid": creds["yostar_uid"],
+        "uid": creds["uid"]
     }
 
     return data
@@ -197,10 +198,11 @@ def Login():
 def OAuth2V1Grant():
     
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "data": {
-            "code": "abcd",
-            "uid": "10000023"
+            "code": creds["token"],
+            "uid": creds["uid"]
         },
         "msg": "OK",
         "status": 0
@@ -223,6 +225,7 @@ def V1NeedCloudAuth():
 def V1getToken():
 
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "channelUid": "1",
         "error": "",
@@ -232,8 +235,8 @@ def V1getToken():
         }),
         "isGuest": 0,
         "result": 0,
-        "token": "abcd",
-        "uid": "10000023"
+        "token": creds["token"],
+        "uid": creds["uid"]
     }
 
     return data
@@ -242,13 +245,14 @@ def V1getToken():
 def Auth():
 
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "isAuthenticate": True,
         "isGuest": False,
         "isLatestUserAgreement": True,
         "isMinor": False,
         "needAuthenticate": False,
-        "uid": "10000023"
+        "uid": creds["uid"]
     }
 
     return data
@@ -294,13 +298,14 @@ def appGetCode():
 def YostarCreatelogin():
 
     data = request.data
+    creds = memory_cache["config"]["userCredentials"]
     data = {
         "isNew": 0,
         "result": 0,
-        "token": "1",
-        "uid": "10000023",
-        "yostar_uid": "1",
-        "yostar_username": "1234567890@123.com"
+        "token": creds["token"],
+        "uid": creds["uid"],
+        "yostar_uid": creds["yostar_uid"],
+        "yostar_username": creds["yostar_username"]
     }
 
     return data
@@ -318,34 +323,37 @@ def Agreement():
     return data
 
 def auth_v1_token_by_phone_password():
+    creds = memory_cache["config"]["userCredentials"]
     return {
         "status": 0,
         "msg": "OK",
         "data": {
-            "token": "doctorate"
+            "token": creds["auth_token"]
         }
     }
 
 def auth_v2_token_by_phone_code():
+    creds = memory_cache["config"]["userCredentials"]
     return {
         "status": 0,
         "msg": "OK",
         "data": {
-            "token": "doctorate"
+            "token": creds["auth_token"]
         }
     }
 
 
 def info_v1_basic():
+    creds = memory_cache["config"]["userCredentials"]
     return {
         "status": 0,
         "msg": "OK",
         "data": {
-            "hgId": "1",
-            "phone": "12345678901",
-            "email": "1234567890@123.com",
-            "identityNum": "10000023",
-            "identityName": "JieG",
+            "hgId": creds["hgId"],
+            "phone": creds["phone"],
+            "email": creds["yostar_username"],
+            "identityNum": creds["uid"],
+            "identityName": creds["identityName"],
             "isMinor": False,
             "isLatestUserAgreement": True
         }
@@ -353,12 +361,13 @@ def info_v1_basic():
 
 
 def oauth2_v2_grant():
+    creds = memory_cache["config"]["userCredentials"]
     return {
         "status": 0,
         "msg": "OK",
         "data": {
-            "code": "JieG",
-            "uid": "10000023"
+            "code": creds["identityName"],
+            "uid": creds["uid"]
         }
     }
 
